@@ -48,7 +48,7 @@ tern plugin install github.com/mmnavarr/overseer
 
 That's it. Tern downloads Overseer into its own plugins folder and loads it; no clone, no build. Press <kbd>⌘</kbd><kbd>⌥</kbd><kbd>⇧</kbd><kbd>P</kbd> to open Projects.
 
-**You'll need** macOS, [Tern](https://docs.stencil.so/tern/) 0.9.9 or later, and [Worktrunk](https://worktrunk.dev) (`brew install worktrunk`; tested with 0.40 and 0.81). These are optional and add features:
+**You'll need** macOS or Windows, [Tern](https://docs.stencil.so/tern/) 0.9.9 or later, and [Worktrunk](https://worktrunk.dev) (`brew install worktrunk`, or `winget install --id max-sixty.worktrunk --exact` on Windows; tested with 0.40 and 0.81). These are optional and add features:
 
 | Add | To get |
 |---|---|
@@ -57,6 +57,13 @@ That's it. Tern downloads Overseer into its own plugins folder and loads it; no 
 | [omp](https://omp.sh) | Ticket agents, Visualize PR, sub-worktrees made by agents, agents messaging each other (Overseer sets up its omp side itself) |
 
 **Update** with `tern plugin install github.com/mmnavarr/overseer --force`. **Uninstall** with `tern plugin remove overseer` (and `omp plugin uninstall overseer-omp` if you use omp).
+
+What's different on Windows:
+
+- **+** opens Explorer's folder dialog, starting beside the last repository added, else `%USERPROFILE%\code` or your profile folder. Drive-letter and UNC paths work, and linked checkouts and junctions resolve to the same project.
+- Overseer runs Worktrunk as `git-wt.exe` (from PATH, Cargo or Winget), never `wt.exe`, which is Windows Terminal. Agents do the same: the `overseer-subworktree` skill tells them to use `git-wt`.
+- Creation and deletion run `worktree-operation.ps1` in a visible terminal, with Worktrunk's hook approvals intact. Its arguments are passed encoded rather than as shell text, so paths and branch names with spaces, Unicode, apostrophes or `$` stay literal.
+- Worktrunk hooks and the sub-worktree script need Bash, which Git for Windows includes. If Git is older than 2.43, upgrade it (`winget upgrade --id Git.Git --exact`) before loading worktrees.
 
 ## Use it
 
