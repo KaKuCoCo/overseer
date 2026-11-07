@@ -116,6 +116,10 @@ end
 -- Deletions being checked before they start or before their changes are
 -- shown: path -> request. In memory only; a reload just drops the check.
 local removalChecks = {}
+-- Delete all: parent path -> labels of the dirty sub-worktrees it kept. Tern
+-- shows one toast at a time and the family's removals toast after the Kept
+-- one, so each "Worktree deleted" of the family names them again. In memory only.
+local keptInFamily = {}
 
 -- Creations' progress, read from their setup tab (see trackCreations): job
 -- id -> { step, asking, needsYou, quiet, changedAt, ... }. In memory only.
@@ -1770,7 +1774,7 @@ local function beginRemoval(cx, request)
 		jobs[jobId] = {
 			kind = "remove", project = project.id, path = worktree.path, branch = worktree.branch,
 			label = request.label, receipt = receipt, pane = terminal, started = os.time(),
-			session = target,
+			session = target, family = request.family,
 		}
 		tern.kv.set("jobs", jobs)
 		oplog.write("info", { op = "remove", event = "started", project = project.name, branch = worktree.branch,
@@ -1787,6 +1791,7 @@ local function beginRemoval(cx, request)
 		-- A sub-worktree deleted along with its parent never loses work: keep it.
 		if request.keepIfDirty then
 			removalChecks[request.path] = nil
+			if request.family and keptInFamily[request.family] then table.insert(keptInFamily[request.family], request.label) end
 			nextCx:toast("info", "Kept sub-worktree", notificationLabel(request.label) .. " has uncommitted changes")
 			redraw(nextCx)
 			return
@@ -1812,6 +1817,7 @@ local function deleteFamily(cx, request, all)
 	local project, parent = findWorktree(request.path)
 	if not project then report(cx, "Worktree not found. Refresh Projects."); redraw(cx); return end
 	if all then
+		keptInFamily[request.path] = {}
 		for _, child in request.children do
 			separately("delete " .. child.label, function(nextCx)
 				local childProject, worktree = findWorktree(child.path)
@@ -1819,6 +1825,7 @@ local function deleteFamily(cx, request, all)
 				beginRemoval(nextCx, {
 					id = token(), kind = "delete", path = child.path, label = worktree.branch or child.label,
 					project = childProject.id, worktree = table.clone(worktree), force = false, keepIfDirty = true,
+					family = request.path,
 				})
 			end)
 		end
@@ -1826,7 +1833,7 @@ local function deleteFamily(cx, request, all)
 	if removalChecks[request.path] then return end
 	beginRemoval(cx, {
 		id = token(), kind = "delete", path = request.path, label = request.label,
-		project = project.id, worktree = table.clone(parent), force = false,
+		project = project.id, worktree = table.clone(parent), force = false, family = if all then request.path else nil,
 	})
 end
 
@@ -2423,7 +2430,9 @@ local function jobFinished(cx, job, status)
 			local closed, closeError = true, nil
 			if job.session then closed, closeError = closeManagedSession(cx, job.path, job.session) end
 			if closed then
-				cx:toast("info", "Worktree deleted", notificationLabel(job.label))
+				local kept = job.family and keptInFamily[job.family]
+				cx:toast("info", "Worktree deleted", notificationLabel(job.label)
+					.. (if kept and #kept > 0 then " · kept " .. notificationLabel(table.concat(kept, ", ")) .. " (uncommitted changes)" else ""))
 			else
 				tern.log.warn("Worktree deleted, but its session was left open: " .. tostring(closeError))
 				cx:toast("error", "Worktree deleted", "Session still open. Check Tern’s log.")
