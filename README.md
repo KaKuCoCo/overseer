@@ -68,7 +68,7 @@ winget install --id max-sixty.worktrunk --exact
 tern plugin install github.com/KaKuCoCo/overseer
 ```
 
-Press <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>Shift</kbd><kbd>P</kbd> to open Projects. **Update** with `tern plugin install github.com/KaKuCoCo/overseer --force`. Tested with Tern 0.9.12 and git-wt 0.81 on Windows 11.
+Press <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>Shift</kbd><kbd>L</kbd> to open Projects (on a PC keyboard Tern reads ⌘ as the Windows key, and Ctrl+Alt+Shift+P is Tern's Picture in picture). **Update** with `tern plugin install github.com/KaKuCoCo/overseer --force`. Tested with Tern 0.9.12 and git-wt 0.81 on Windows 11.
 
 What's different on Windows:
 

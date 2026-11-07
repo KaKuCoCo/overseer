@@ -2525,7 +2525,7 @@ local function command(id, title, icon, keys, run)
 		separately("command " .. id, run)
 	end })
 end
-command("projects", "Show or hide Projects", "branch", { "cmd+alt+shift+p" }, togglePanel)
+command("projects", "Show or hide Projects", "branch", { if wt.WINDOWS then "ctrl+alt+shift+l" else "cmd+alt+shift+p" }, togglePanel)
 command("add", "Add project", "folder", nil, pickProject)
 command("create", "Create worktree", "branch", nil, function(cx)
 	local project = activeWorktree(cx)

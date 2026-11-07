@@ -124,7 +124,7 @@ What the user sees, precisely. README.md summarizes this; when behavior changes,
 
 ### The panel
 
-1. **Show Projects:** <kbd>⌘</kbd><kbd>⌥</kbd><kbd>⇧</kbd><kbd>P</kbd>, or **Show or hide Projects** in the command palette. Press it again while the panel has focus to hide it.
+1. **Show Projects:** <kbd>⌘</kbd><kbd>⌥</kbd><kbd>⇧</kbd><kbd>P</kbd> (<kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>Shift</kbd><kbd>L</kbd> on Windows), or **Show or hide Projects** in the command palette. Press it again while the panel has focus to hide it.
 2. **Add a repo:** **+** in the panel's header opens the folder picker.
 3. **Open a worktree:** click its row. Its session opens, and the panel comes with it.
 4. **New worktree:** **+** next to a project. Type a branch name and, if you like, a display name. The row appears straight away as **Creating** and becomes a normal row when setup is done.
