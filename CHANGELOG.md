@@ -9,6 +9,7 @@ Overseer 2.4.1 with Malcolm Navarro's Windows port (`windows-support`) carried o
 - **Ctrl+Alt+Shift+L shows Projects on Windows.** Tern reads `cmd` in a chord as the Windows key on a PC keyboard, so ⌘⌥⇧P meant Win+Alt+Shift+P there, and Ctrl+Alt+Shift+P is Tern's own Picture in picture. macOS keeps ⌘⌥⇧P.
 - **Fixed: updating on Windows while Overseer runs.** `tern plugin install --force` failed with "file in use" (os error 32): Overseer's commands, among them the 5-second clock and an open folder picker, ran inside its own folder, and Windows won't replace a folder a process runs in. They now run in the Windows folder unless they need a repository's.
 - **Fixed: Overseer relinked its omp half on every load on Windows.** omp lists the junction it made in its own plugins folder, not the folder it leads to, so the paths never matched. Overseer now reads where the junction leads before comparing.
+- **Fixed: Show Overseer's operation log on Windows.** It ran `less` through your shell, and Git for Windows keeps `less` off PATH, so the tab only said the command wasn't found. Windows now opens the log in Tern's file view, at its newest line.
 
 ## 2.4.1 (2026-11-06)
 

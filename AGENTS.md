@@ -70,7 +70,7 @@ Tern's plugin KV, via `tern.kv`: `~/Library/Application Support/Tern/plugin-data
 | `rails` | `{queue, unread, sentAt, checkin, told}` | Coordination relays; see [Flows](#flows). |
 | `coordination-migrated` | `{[projectId]: true}` | Repositories already settled by the 2.4.0 opt-in migration (or switched by hand), so it runs once each. |
 
-Beside the kv store, `ops.log` in the plugin data directory is the operation log: one JSON line per creation, deletion, brief, relay and gone worktree (start, finish, duration, outcome, first warning), newest last, capped at 256 KB. The **Show Overseer's operation log** command opens it in `less`. The same entries go to Tern's log, at info for routine starts and finishes and warn for failures, warnings and "needs you".
+Beside the kv store, `ops.log` in the plugin data directory is the operation log: one JSON line per creation, deletion, brief, relay and gone worktree (start, finish, duration, outcome, first warning), newest last, capped at 256 KB. The **Show Overseer's operation log** command opens it in `less` (on Windows, where Git for Windows keeps `less` off PATH, in Tern's file view at its last line). The same entries go to Tern's log, at info for routine starts and finishes and warn for failures, warnings and "needs you".
 
 Shared with agents through Git config (Worktrunk's per-branch variables): `overseer-parent` (sub-worktree links) and `overseer-lead` (the pane id of a worktree's overseer session).
 

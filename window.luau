@@ -2509,12 +2509,20 @@ local function trackCreations(cx)
 	if changed then redraw(cx) end
 end
 
--- Opens a saved log in a new tab with less. The command goes through your
--- shell, and single quotes keep the path one word in bash, zsh, fish and nu.
+-- Opens a saved log in a new tab with less, at its end. The command goes through
+-- your shell, and single quotes keep the path one word in bash, zsh, fish and nu.
+-- Git for Windows keeps less off PATH, so Windows shows it in Tern's file view.
 local function openLog(cx, file, name)
 	if not tern.fs.exists(file) then report(cx, "That log is no longer saved."); return end
-	if string.find(file, "'", 1, true) then report(cx, "Can't open " .. file .. " through a shell."); return end
-	local pane = cx.layout:new_tab({ command = "less -R +G '" .. file .. "'" })
+	local pane
+	if wt.WINDOWS then
+		local read, text = pcall(tern.fs.read, file, 1024 * 1024)
+		local _, lines = string.gsub(if read and type(text) == "string" then text else "", "\n", "")
+		pane = cx.docs:open(file, { how = "tab", line = math.max(lines, 1) })
+	else
+		if string.find(file, "'", 1, true) then report(cx, "Can't open " .. file .. " through a shell."); return end
+		pane = cx.layout:new_tab({ command = "less -R +G '" .. file .. "'" })
+	end
 	local tab = pane and cx.session:tab_of(pane)
 	if tab then cx.layout:name_tab(tab, name) end
 end
