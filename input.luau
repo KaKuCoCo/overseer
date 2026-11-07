@@ -1,5 +1,11 @@
 local Input = {}
 
+-- The shortcut modifier: Cmd on macOS, Ctrl elsewhere (Tern reads Cmd as the Windows key on a PC).
+local MAC = tern.runtime.os == "macos"
+function Input.primary(key)
+	return if MAC then key.meta else key.ctrl
+end
+
 -- Editing positions are code-point boundaries; only the view uses UTF-16.
 local function byteAt(text, position)
 	return utf8.offset(text, position + 1) or (#text + 1)
@@ -75,7 +81,7 @@ end
 
 function Input.key(field, key)
 	local length = utf8.len(field.text)
-	if key.meta and string.lower(key.name) == "a" then
+	if Input.primary(key) and string.lower(key.name) == "a" then
 		field.anchor, field.cursor = 0, length
 	elseif key.name == "home" or (key.meta and key.name == "left") then
 		move(field, 0, key.shift)

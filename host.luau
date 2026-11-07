@@ -218,7 +218,7 @@ tern.block.define("form", {
 			local index = table.find(order, state.focus) or 1
 			state.focus = order[((index - 1 + (if key.shift then -1 else 1)) % #order) + 1]
 			focus(state, cx)
-		elseif key.meta and string.lower(key.name) == "c" then
+		elseif Input.primary(key) and string.lower(key.name) == "c" then
 			local selection = Input.selection(state.fields[state.focus])
 			if selection == "" then return false end
 			cx:copy(selection)

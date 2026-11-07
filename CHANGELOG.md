@@ -10,6 +10,7 @@ Overseer 2.4.1 with Malcolm Navarro's Windows port (`windows-support`) carried o
 - **Fixed: updating on Windows while Overseer runs.** `tern plugin install --force` failed with "file in use" (os error 32): Overseer's commands, among them the 5-second clock and an open folder picker, ran inside its own folder, and Windows won't replace a folder a process runs in. They now run in the Windows folder unless they need a repository's.
 - **Fixed: Overseer relinked its omp half on every load on Windows.** omp lists the junction it made in its own plugins folder, not the folder it leads to, so the paths never matched. Overseer now reads where the junction leads before comparing.
 - **Fixed: Show Overseer's operation log on Windows.** It ran `less` through your shell, and Git for Windows keeps `less` off PATH, so the tab only said the command wasn't found. Windows now opens the log in Tern's file view, at its newest line.
+- **Fixed: Ctrl+A and Ctrl+C in Overseer's forms on Windows.** The form's text field took Cmd for select all and copy, which Tern reads as the Windows key on a PC, so Ctrl+A did nothing there. Off macOS they use Ctrl. Paste is Ctrl+Shift+V, as in Tern's terminals: Tern hands a plugin's form a paste only through its own paste command.
 
 ## 2.4.1 (2026-11-06)
 
