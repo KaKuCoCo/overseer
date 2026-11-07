@@ -78,7 +78,10 @@ local CONFIRMATIONS = {
 	delete = {
 		title = "Delete worktree with uncommitted changes?", confirm = "Force delete", keep = "Keep this worktree and session",
 		icon = "trash", tone = "error", variant = "danger",
-		detail = "Force deleting removes these changes and the directory's ignored files for good. Keeps Git branches and commits. Its session closes after successful removal. Stop file-writing tasks first.",
+		detail = "Force deleting removes these changes and the directory's ignored files for good. Keeps Git branches and commits. "
+			.. (if tern.runtime.os == "windows" then "Its session closes first, since Windows can't remove a folder a program runs in."
+				else "Its session closes after successful removal.")
+			.. " Stop file-writing tasks first.",
 	},
 	["remove-project"] = {
 		title = "Remove project?", confirm = "Remove project", keep = "Keep this project",

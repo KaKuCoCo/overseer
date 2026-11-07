@@ -1740,6 +1740,12 @@ local function beginRemoval(cx, request)
 		local receipt = tern.plugin.data .. "/removal-" .. jobId .. ".status"
 		local ready, command = pcall(wt.removal_command, project, worktree, receipt, force)
 		if not ready then failed(nextCx, command); return end
+		-- Windows can't remove a folder a program runs in, and the session's
+		-- programs run in this one, so its session closes first there.
+		if wt.WINDOWS then
+			local closed, closeError = closeManagedSession(nextCx, worktree.path)
+			if not closed then failed(nextCx, closeError); return end
+		end
 		-- Like creation, the output tab opens in the background; you stay put.
 		local terminal = nextCx.layout:new_tab({ cwd = project.path, command = command }, { focus = false })
 		if not terminal then failed(nextCx, "Could not open the removal terminal."); return end
@@ -2414,7 +2420,7 @@ local function jobFinished(cx, job, status)
 				cx:toast("error", "Worktree deleted", "Session still open. Check Tern’s log.")
 			end
 		else
-			cx:toast("error", "Worktree deletion failed", "Check the Delete tab. Session kept.")
+			cx:toast("error", "Worktree deletion failed", if job.session then "Check the Delete tab. Session kept." else "Check the Delete tab.")
 		end
 	else
 		-- Applied on failure too: a partially created worktree keeps its label.
