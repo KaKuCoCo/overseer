@@ -48,7 +48,7 @@ tern plugin install github.com/mmnavarr/overseer
 
 That's it. Tern downloads Overseer into its own plugins folder and loads it; no clone, no build. Press <kbd>⌘</kbd><kbd>⌥</kbd><kbd>⇧</kbd><kbd>P</kbd> to open Projects.
 
-**You'll need** macOS or Windows, [Tern](https://docs.stencil.so/tern/) 0.9.9 or later, and [Worktrunk](https://worktrunk.dev) (`brew install worktrunk`, or `winget install --id max-sixty.worktrunk --exact` on Windows; tested with 0.40 and 0.81). These are optional and add features:
+**You'll need** macOS or Windows, [Tern](https://docs.stencil.so/tern/) 0.9.9 or later, and [Worktrunk](https://worktrunk.dev) (`brew install worktrunk`; tested with 0.40 and 0.81). These are optional and add features:
 
 | Add | To get |
 |---|---|
@@ -57,6 +57,18 @@ That's it. Tern downloads Overseer into its own plugins folder and loads it; no 
 | [omp](https://omp.sh) | Ticket agents, Visualize PR, sub-worktrees made by agents, agents messaging each other (Overseer sets up its omp side itself) |
 
 **Update** with `tern plugin install github.com/mmnavarr/overseer --force`. **Uninstall** with `tern plugin remove overseer` (and `omp plugin uninstall overseer-omp` if you use omp).
+
+### Windows
+
+The Windows port lives in [KaKuCoCo/overseer](https://github.com/KaKuCoCo/overseer), on its default branch `windows`. In PowerShell:
+
+```powershell
+winget install --id Git.Git --exact
+winget install --id max-sixty.worktrunk --exact
+tern plugin install github.com/KaKuCoCo/overseer
+```
+
+Press <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>Shift</kbd><kbd>P</kbd> to open Projects. **Update** with `tern plugin install github.com/KaKuCoCo/overseer --force`. Tested with Tern 0.9.12 and git-wt 0.81 on Windows 11.
 
 What's different on Windows:
 

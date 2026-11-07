@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.4.1-windows.1 (2026-11-08)
+
+Overseer 2.4.1 with Malcolm Navarro's Windows port (`windows-support`) carried onto it. Install it from [KaKuCoCo/overseer](https://github.com/KaKuCoCo/overseer); see the README.
+
+- **Overseer runs on Windows.** **+** opens Explorer's folder dialog; drive-letter and UNC paths work, and linked checkouts and junctions resolve to the same project. Worktrees are listed, created and deleted (Force delete included) through Worktrunk's `git-wt.exe`, never Windows Terminal's `wt.exe`, found on PATH or in Cargo's or Winget's folders. Creation and deletion run a PowerShell helper in a visible terminal with your hook approvals intact; its arguments are passed encoded, so paths and branch names with spaces, Unicode, apostrophes or `$` stay literal. Deletion rechecks the worktree's identity on physical paths and still keeps the branch. Sessions, agent status, sub-worktrees and their briefs, coordination and Visualize PR use Windows paths too.
+- **Agents use `git-wt` on Windows.** The `overseer-subworktree` script runs Worktrunk as `git-wt` under Git Bash, and the skill and rule tell agents to type `git-wt` there.
+- **Fixed: updating on Windows while Overseer runs.** `tern plugin install --force` failed with "file in use" (os error 32): Overseer's commands, among them the 5-second clock and an open folder picker, ran inside its own folder, and Windows won't replace a folder a process runs in. They now run in the Windows folder unless they need a repository's.
+- **Fixed: Overseer relinked its omp half on every load on Windows.** omp lists the junction it made in its own plugins folder, not the folder it leads to, so the paths never matched. Overseer now reads where the junction leads before comparing.
+
 ## 2.4.1 (2026-11-06)
 
 - **Clearer worktree state marks.** Waiting, finished and failed agents show as filled circles in the state's colour with a `?`, check or `!` on top, sized and centred like the other dots, instead of heavy text characters.
