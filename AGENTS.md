@@ -49,7 +49,7 @@ When debugging an overrun, read the log: `exceeded its budget; paused … hook="
 | `omp/skills/overseer-subworktree/` | The omp skill and script for creating worktrees: sub-worktrees of the worktree the script runs in (optionally with a brief for their own session), top-level ones otherwise. |
 | `omp/rules/overseer-worktrees.md` | The omp TTSR rule that redirects raw worktree-creating commands to that skill. |
 | `omp/overseer-rails/index.ts` | The omp extension behind [coordination](#coordination): family summary before each prompt, the notes board, the `overseer_family` tool and its mailbox. |
-| `omplink.luau` | Links `omp/` into omp each time the plugin loads, and removes the old hand-made symlinks; logs to the operation log. |
+| `omplink.luau` | Links `omp/` into omp each time the plugin loads, and removes the old hand-made symlinks; logs to the operation log. omp lists a linked package by its own link's path, so the check resolves that link first (`cd -P` on macOS; the junction's `Target` in PowerShell on Windows). |
 | `oplog.luau` | The operation log (`ops.log`), reading an operation's terminal, and spotting a creation's step, questions and warnings in it. |
 | `tests/test_worktree_operation.py`, `tests/test_subworktree.py` | Real Git/Worktrunk tests for the helper and the sub-worktree script. |
 

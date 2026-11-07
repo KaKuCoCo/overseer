@@ -29,9 +29,11 @@ local function warn(event, detail)
 	oplog.write("warn", { op = "omp link", event = event, detail = detail })
 end
 
--- Runs argv and calls fn(result) once it exits 0; anything else is logged.
-local function run(event, argv, fn)
-	local ok, err = pcall(budget.process, "omp link " .. event, argv, { timeout_ms = TIMEOUT_MS }, function(result)
+-- Runs argv (with `env` added to the environment) and calls fn(result) once
+-- it exits 0; anything else is logged.
+local function run(event, argv, fn, env)
+	local options = { timeout_ms = TIMEOUT_MS, env = env }
+	local ok, err = pcall(budget.process, "omp link " .. event, argv, options, function(result)
 		if result.timed_out then
 			warn(event, argv[1] .. " timed out")
 		elseif result.status ~= 0 then
@@ -96,9 +98,16 @@ function M.ensure()
 			return
 		end
 		if wt.WINDOWS then
-			-- Windows paths compare without case or separator style; no Bash to resolve links.
+			-- omp lists the junction it made, not the folder it leads to; Windows
+			-- paths compare without case or separator style.
 			local function key(path) return string.lower((string.gsub(wt.normalize_path(path), "/+$", ""))) end
-			if key(source) == key(entry.path) then removeLegacy() else link(omp, source, entry.enabled == false) end
+			local target = { "powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+				"(Get-Item -LiteralPath $env:OVERSEER_OMP_LINK).Target" }
+			run("resolve", target, function(resolved)
+				local linked = string.match(resolved.stdout or "", "^%s*(.-)%s*$")
+				if linked == "" then linked = entry.path end
+				if key(source) == key(linked) then removeLegacy() else link(omp, source, entry.enabled == false) end
+			end, { OVERSEER_OMP_LINK = entry.path })
 			return
 		end
 		-- Compare where both paths really lead; Tern may hand us a symlinked dir.
