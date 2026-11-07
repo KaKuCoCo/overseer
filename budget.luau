@@ -24,9 +24,15 @@ function M.later(label, ms, fn)
 	end)
 end
 
+-- A process started without `cwd` runs in the plugin's folder. Windows won't
+-- replace a folder a process runs in, so `tern plugin install --force` would
+-- fail while the process clock or the folder picker runs: start them elsewhere.
+local DEFAULT_CWD = if tern.runtime.os == "windows" then tern.getenv("SystemRoot") or "C:/Windows" else nil
+
 -- Starts argv and calls fn(result, cx) with its result, or raises when it
 -- can't start. Errors in fn are logged under `label`.
 function M.process(label, argv, options, fn)
+	if options.cwd == nil then options.cwd = DEFAULT_CWD end
 	tern.process.run(argv, options, function(result, cx)
 		local ok, err = pcall(fn, result, cx)
 		if not ok then tern.log.warn("Overseer: " .. label .. " failed: " .. tostring(err)) end
