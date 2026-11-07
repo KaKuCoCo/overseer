@@ -1216,10 +1216,12 @@ local function noticeFinished(cx, project, entry)
 				told.finishedAt, changed = nil, true
 			elseif pr and told.pr ~= key then
 				told.pr, told.finishedAt, changed = key, nil, true
+				-- An agent's first turn can end before Tern has its last message.
 				local said = oneLine(told.lastMessage, 300)
+				local quoted = if said ~= "" then " Its last message: \"" .. said .. "\"" else ""
 				tell(cx, owner.path, string.format(
-					"Overseer: sub-worktree %s finished a turn with PR #%s (%s): %s. Its last message: \"%s\"",
-					treeLabel(project, worktree), tostring(pr.number), tostring(pr.state), tostring(pr.url or ""), said))
+					"Overseer: sub-worktree %s finished a turn with PR #%s (%s): %s.%s",
+					treeLabel(project, worktree), tostring(pr.number), tostring(pr.state), tostring(pr.url or ""), quoted))
 			end
 		end
 	end
