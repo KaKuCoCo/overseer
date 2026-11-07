@@ -106,6 +106,13 @@ local function removing(path, jobs)
 	return false
 end
 
+-- Whether the checkout at `path` is gone. Windows can't remove a folder a
+-- program runs in, so a worktree removed outside Overseer while its session
+-- is open leaves its empty folder behind; the checkout itself is gone with `.git`.
+local function checkoutGone(path)
+	return not tern.fs.exists(path .. "/.git")
+end
+
 -- Deletions being checked before they start or before their changes are
 -- shown: path -> request. In memory only; a reload just drops the check.
 local removalChecks = {}
@@ -718,7 +725,7 @@ local function reconcileGone(cx, project, entry)
 	for _, worktree in entry.worktrees do listed[worktree.path] = true end
 	local jobs = records("jobs")
 	local function gone(path)
-		return not listed[path] and not removing(path, jobs) and not tern.fs.exists(path)
+		return not listed[path] and not removing(path, jobs) and checkoutGone(path)
 	end
 	local before = entry.gone or {}
 	entry.gone = {}
@@ -1529,7 +1536,7 @@ local function openWorktree(cx, path)
 	if not project then
 		-- A worktree removed outside Overseer: its flagged session can still be shown.
 		local session = boundSession(path, sessionsById(cx))
-		if session and not tern.fs.exists(path) then
+		if session and checkoutGone(path) then
 			cx.sessions:switch(session.id)
 			follow(cx)
 			redraw(cx)
