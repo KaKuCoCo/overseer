@@ -55,7 +55,7 @@ class SubworktreeTests(unittest.TestCase):
     def run_command(self, *args, cwd, check=True, stdin=""):
         result = subprocess.run(
             [str(arg) for arg in args], cwd=cwd, env=self.env,
-            input=stdin, capture_output=True, text=True, timeout=60,
+            input=stdin, capture_output=True, text=True, encoding="utf-8", timeout=60,
         )
         if check:
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
