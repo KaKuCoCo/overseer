@@ -2570,7 +2570,17 @@ local function command(id, title, icon, keys, run)
 		separately("command " .. id, run)
 	end })
 end
-command("projects", "Show or hide Projects", "branch", { if wt.WINDOWS then "ctrl+alt+shift+l" else "cmd+alt+shift+p" }, togglePanel)
+-- The panel shortcut runs at once: Tern fires a queued timer only when the
+-- window next has an event, so a deferred toggle sat for seconds after a lone
+-- keypress. Toggling takes a few milliseconds, far inside the 50 ms budget.
+tern.command({
+	id = "projects", title = "Show or hide Projects", icon = "branch",
+	keys = { if wt.WINDOWS then "ctrl+alt+shift+l" else "cmd+alt+shift+p" },
+	run = function(cx)
+		local ok, err = pcall(togglePanel, cx)
+		if not ok and problem ~= tostring(err) then report(cx, err) end
+	end,
+})
 command("add", "Add project", "folder", nil, pickProject)
 command("create", "Create worktree", "branch", nil, function(cx)
 	local project = activeWorktree(cx)
