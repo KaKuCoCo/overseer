@@ -929,12 +929,16 @@ local function setWantPanel(want)
 	tern.kv.set("panel-open", want)
 end
 
--- Opens a fresh navigator in `tab`.
+-- Opens a fresh navigator in `tab`, already left of everything at its saved
+-- width, so its first frame is final: no half-width frame, move and resizes.
 local function openPanel(cx, tab)
 	local data = model(cx)
+	local layout = tab and cx.session:layout(tab)
+	local target = layout and firstLeaf(layout.root)
 	local pane, err = cx.canvas:open({
 		title = NAVIGATOR.title, about = NAVIGATOR.about,
 		view = view.render(data), how = "beside", focus = false,
+		target = target, dir = if target then "left" else nil, ratio = if target then share else nil,
 	})
 	if not pane then report(cx, err or "Could not open the Projects panel"); return nil end
 	slotPane = pane
