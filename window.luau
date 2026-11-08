@@ -991,6 +991,9 @@ local function swapSlot(cx, old, open)
 	return pane
 end
 
+-- The pane focused before the panel took focus, so hiding the panel gives it back.
+local returnFocus = nil
+
 -- Shows the Projects panel in the shown tab and focuses it, opening it if needed.
 local function navigator(cx)
 	if not requireLocal(cx) then return nil end
@@ -1003,6 +1006,8 @@ local function navigator(cx)
 		pane = openPanel(cx, tab)
 		if not pane then return nil end
 	end
+	local focused = cx.session:focused()
+	if focused ~= pane then returnFocus = focused end
 	cx.layout:focus(pane)
 	refresh(cx)
 	return pane
@@ -1013,10 +1018,14 @@ local function togglePanel(cx)
 	if not requireLocal(cx) then return end
 	local pane, kind = slot(cx)
 	if pane and kind == "canvas" and cx.session:focused() == pane then
+		local back = returnFocus
+		local tab = cx.session:tab_of(pane)
 		setWantPanel(false)
 		cx.layout:close(pane)
 		rendered[pane] = nil
-		slotPane, panelTab = nil, nil
+		slotPane, panelTab, returnFocus = nil, nil, nil
+		-- Tern focuses another pane of the tab; give focus back to the one you came from.
+		if back and cx.session:pane(back) and cx.session:tab_of(back) == tab then cx.layout:focus(back) end
 		return
 	end
 	navigator(cx)
