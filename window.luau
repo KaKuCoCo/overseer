@@ -9,7 +9,8 @@ local omplink = require("./omplink")
 local cache = {}
 local inflight = {}
 -- Helper liveness probes: job id -> true while a PID lookup runs; dead[id] after the helper is gone.
-local probing, dead = {}, {}
+-- missed[id] is when a lookup first found no such process (see helperFailed).
+local probing, dead, missed = {}, {}, {}
 local rendered = {}
 local collapsed = {}
 -- Parent worktrees whose sub-worktrees are folded away: path -> true. In memory, like `collapsed`.
@@ -2384,6 +2385,10 @@ end
 -- terminal that looks closed or missing is just a hint: Tern can misreport a
 -- pane while its program keeps running in the session daemon. Report failure
 -- only once the helper process is confirmed gone without writing a receipt.
+-- `cx.procs:find` answers from a process sample about 2 s old, so a helper
+-- younger than that is not in it yet: a lookup that finds nothing counts only
+-- when an earlier one found nothing MISS_CONFIRM_S before.
+local MISS_CONFIRM_S = 3
 local function helperFailed(cx, id, job)
 	if dead[id] then return true end
 	if probing[id] then return false end
@@ -2399,7 +2404,14 @@ local function helperFailed(cx, id, job)
 		cx.procs:find(pid):next(function(info, err)
 			probing[id] = nil
 			-- An error says nothing about the helper; only a clean "no such process" does.
-			if not err and info == nil then dead[id] = true end
+			if err then return end
+			if info ~= nil then
+				missed[id] = nil
+			elseif not missed[id] then
+				missed[id] = os.time()
+			elseif os.time() - missed[id] >= MISS_CONFIRM_S then
+				dead[id] = true
+			end
 		end)
 	end)
 	if not ok then probing[id] = nil end
@@ -2486,7 +2498,7 @@ local function checkJobs(cx, inline)
 	for id in finished do jobs[id] = nil end
 	tern.kv.set("jobs", jobs)
 	for id, done in finished do
-		probing[id], dead[id] = nil, nil
+		probing[id], dead[id], missed[id] = nil, nil, nil
 		for _, file in { done.job.receipt, done.job.receipt .. ".pid" } do
 			if tern.fs.exists(file) then tern.fs.remove(file) end
 		end

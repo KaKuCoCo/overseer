@@ -6,7 +6,7 @@
 
 ### Changed
 - 檢查建立或刪除 worktree 的 helper 是否還活著時，改用 `cx.procs:find(pid)`，不再開 `powershell.exe Get-Process` 或 `/bin/kill -0`。
-  - 原因：同一個 API 跨平台共用，也省下 PowerShell 冷啟動。
+  - 原因：同一個 API 跨平台共用，也省下 PowerShell 冷啟動。`cx.procs:find` 用約 2 秒前的程序快照，剛啟動的 helper 查不到，所以要相隔 3 秒連續兩次查無才算已結束。
   - 上游：未回報。
 
 ### Removed
