@@ -8,7 +8,7 @@ local omplink = require("./omplink")
 
 local cache = {}
 local inflight = {}
--- Helper liveness probes: job id -> true while a native PID check runs; dead[id] after exit.
+-- Helper liveness probes: job id -> true while a PID lookup runs; dead[id] after the helper is gone.
 local probing, dead = {}, {}
 local rendered = {}
 local collapsed = {}
@@ -2384,7 +2384,7 @@ end
 -- terminal that looks closed or missing is just a hint: Tern can misreport a
 -- pane while its program keeps running in the session daemon. Report failure
 -- only once the helper process is confirmed gone without writing a receipt.
-local function helperFailed(id, job)
+local function helperFailed(cx, id, job)
 	if dead[id] then return true end
 	if probing[id] then return false end
 	local pidFile = job.receipt .. ".pid"
@@ -2395,14 +2395,14 @@ local function helperFailed(id, job)
 	local pid = tonumber(tern.fs.read(pidFile))
 	if not pid then return true end
 	probing[id] = true
-	local argv = if tern.runtime.os == "windows" then {
-		"powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
-		"if (Get-Process -Id " .. tostring(pid) .. " -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }",
-	} else { "/bin/kill", "-0", tostring(pid) }
-	wt.spawn(argv, { timeout_ms = 5000 }, function(result)
-		probing[id] = nil
-		if result and result.status ~= 0 then dead[id] = true end
+	local ok = pcall(function()
+		cx.procs:find(pid):next(function(info, err)
+			probing[id] = nil
+			-- An error says nothing about the helper; only a clean "no such process" does.
+			if not err and info == nil then dead[id] = true end
+		end)
 	end)
+	if not ok then probing[id] = nil end
 	return false
 end
 
@@ -2476,7 +2476,7 @@ local function checkJobs(cx, inline)
 			status = tonumber(tern.fs.read(job.receipt)) or -1
 		else
 			local pane = cx.session:pane(job.pane)
-			if (not pane or pane.exited ~= nil or pane.error) and helperFailed(id, job) then status = -1 end
+			if (not pane or pane.exited ~= nil or pane.error) and helperFailed(cx, id, job) then status = -1 end
 		end
 		if status ~= nil then finished[id] = { job = job, status = status } end
 	end

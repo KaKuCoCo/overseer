@@ -4,6 +4,11 @@
 
 ## 2026-11-10
 
+### Changed
+- 檢查建立或刪除 worktree 的 helper 是否還活著時，改用 `cx.procs:find(pid)`，不再開 `powershell.exe Get-Process` 或 `/bin/kill -0`。
+  - 原因：同一個 API 跨平台共用，也省下 PowerShell 冷啟動。
+  - 上游：未回報。
+
 ### Removed
 - 移除狀態列的 Projects 按鈕。
   - 原因：精簡狀態列；面板仍可用 `Ctrl+Alt+Shift+L` 或命令開關。
