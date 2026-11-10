@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Removed the Projects status line button. Use Ctrl+Alt+Shift+L on Windows or the Show or hide Projects command.
+
 ## 2.4.1-windows.1 (2026-11-08)
 
 Overseer 2.4.1 with Malcolm Navarro's Windows port (`windows-support`) carried onto it. Install it from [KaKuCoCo/overseer](https://github.com/KaKuCoCo/overseer); see the README.

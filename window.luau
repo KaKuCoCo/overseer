@@ -2770,10 +2770,6 @@ tern.override("new_tab", function(cx)
 	return true
 end)
 
-tern.chrome.status(function()
-	return { { text = "Projects", icon = "branch", command = "plugin.overseer.projects" } }
-end)
-
 -- Moves the panel into the shown tab and draws it, in a callback of its own;
 -- changes made before it runs share it. `quiet` skips the draw: the tick
 -- follows every 750 ms but only needs to draw for its clocks (elapsed times,
