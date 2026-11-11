@@ -2,6 +2,12 @@
 
 上游：[mmnavarr/overseer](https://github.com/mmnavarr/overseer)
 
+## 2026-11-11
+
+### Changed
+- 合併上游 2.4.2，版本號改為 `2.4.2-windows.1`。
+  - 原因：與上游正式版本區分。
+
 ## 2026-11-10
 
 ### Changed

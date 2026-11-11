@@ -1,8 +1,14 @@
 # Changelog
 
-## Unreleased
+## 2.4.2-windows.1 (2026-11-11)
+
+Overseer 2.4.2 with the Windows port carried onto it.
 
 - Removed the Projects status line button. Use Ctrl+Alt+Shift+L on Windows or the Show or hide Projects command.
+
+## 2.4.2 (2026-11-09)
+
+- **Fixed: the Projects panel's width in tabs that already have splits.** Tern places a pane beside another, so in a tab with splits the panel lands nested inside one, and Overseer stopped measuring it: the panel arrived at the wrong width (half of the pane it was placed beside), and a width you dragged it to there was forgotten on the next tab switch. Overseer now measures the panel's share of the tab however deeply it's nested, so it arrives at the width you left it and remembers changes. Thanks to [@cxxzsh](https://github.com/cxxzsh) ([#5](https://github.com/mmnavarr/overseer/pull/5)).
 
 ## 2.4.1-windows.1 (2026-11-08)
 
