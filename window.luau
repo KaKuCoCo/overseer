@@ -5,6 +5,8 @@ local visualize = require("./visualize")
 local budget = require("./budget")
 local oplog = require("./oplog")
 local omplink = require("./omplink")
+local Prefs = require("./prefs")
+local update = require("./update")
 
 local cache = {}
 local inflight = {}
@@ -16,6 +18,9 @@ local collapsed = {}
 -- Parent worktrees whose sub-worktrees are folded away: path -> true. In memory, like `collapsed`.
 local folded = {}
 local confirmation
+-- The toast with a button the panel is showing (see notify): { n, at, text, sub, tone, action, label }.
+local notice
+local NOTICE_KEEP_S = 6
 local problem
 local lastRefresh = -15000
 -- Whether ↻ is spinning for an explicit refresh.
@@ -173,16 +178,56 @@ local AGENT_RANK = { waiting = 4, failed = 3, done = 2, working = 1 }
 -- their `busy` stays set while they sit idle, so it isn't consulted for them.
 -- Agent CLIs in plain terminals only report progress, which Tern exposes as
 -- `busy` (a CLI that hasn't reported progress yet counts as busy while it runs).
--- One callback's view of the window's panes, tabs and agents. Each list costs
--- several milliseconds to fetch and a draw used to fetch them six times. A
--- callback gets a fresh `cx`, so keying by it scopes the snapshot to one; the
--- age limit keeps it honest should a `cx` ever be reused.
+-- One callback's view of the window's panes, tabs and agents, so a draw
+-- fetches each list once. A callback gets a fresh `cx`, so keying by it
+-- scopes the snapshot to one; the age limit keeps it honest should a `cx`
+-- ever be reused.
 local SNAPSHOT_MS = 100
 local snapshots = setmetatable({}, { __mode = "k" })
+
+-- Agents' states. cx.agents:list() takes 7 to 20 ms (measured in 2.4.3; it
+-- also returns every agent's last reply), while the pane list takes 0.1 ms and already says which
+-- agent blocks exist and where. So states come from agent_state events, and
+-- the full list is only read for agents no event has covered yet (those open
+-- before this load) and every AGENT_RECONCILE_MS, in case an event was missed.
+-- A pane the full list didn't report is recorded as false.
+local AGENT_RECONCILE_MS = 30000
+local agentStates = {}
+local agentCwds = {}
+local agentsListedAt = -AGENT_RECONCILE_MS
+
+local function agentBlocks(cx, panes)
+	local stale = tern.now() - agentsListedAt >= AGENT_RECONCILE_MS
+	for _, pane in panes do
+		if stale then break end
+		if pane.kind == "agent" and agentStates[pane.pane] == nil then stale = true end
+	end
+	if stale then
+		agentStates, agentCwds = {}, {}
+		for _, pane in panes do
+			if pane.kind == "agent" then agentStates[pane.pane] = false end
+		end
+		for _, agent in cx.agents:list() do
+			agentStates[agent.pane], agentCwds[agent.pane] = agent.state, agent.cwd
+		end
+		agentsListedAt = tern.now()
+	end
+	local list = {}
+	for _, pane in panes do
+		local state = pane.kind == "agent" and agentStates[pane.pane]
+		if state then
+			local cwd = if pane.cwd and pane.cwd ~= "" then pane.cwd else agentCwds[pane.pane]
+			table.insert(list, { pane = pane.pane, state = state, cwd = cwd })
+		end
+	end
+	return list
+end
+
 local function snapshot(cx)
 	local found = snapshots[cx]
 	if not found or tern.now() - found.at > SNAPSHOT_MS then
-		found = { panes = cx.session:panes(), tabs = cx.session:tabs(), agents = cx.agents:list(), at = tern.now() }
+		local panes = cx.session:panes()
+		found = { panes = panes, tabs = cx.session:tabs(), agents = agentBlocks(cx, panes), at = tern.now() }
 		snapshots[cx] = found
 	end
 	return found
@@ -394,7 +439,9 @@ local function model(cx)
 	local sessions = sessionsById(cx)
 	local names = records("worktree-names")
 	local bindings, jobs = records("sessions"), records("jobs")
-	local icebox = records("icebox")
+	local iceboxOn = Prefs.get().icebox
+	-- Ice Box off: parked worktrees show in place; their marks stay for turning it back on.
+	local icebox = if iceboxOn then records("icebox") else {}
 	local showIcebox = tern.kv.get("show-icebox") ~= false
 	local activity = agentActivity(cx)
 	local tabs = tabRows(cx, activity)
@@ -414,9 +461,14 @@ local function model(cx)
 			}
 		end
 	end
+	local newer = update.available()
 	local result = {
 		projects = {}, collapsed = collapsed, confirmation = confirmation,
-		showIcebox = showIcebox, refreshing = spinning,
+		showIcebox = showIcebox, iceboxEnabled = iceboxOn, refreshing = spinning,
+		-- A newer Overseer this copy can update to: the header's Update button.
+		update = if newer then { latest = newer, installed = update.installed } else nil,
+		-- Kept a little past the toast's own 5.2 s, then dropped from the view.
+		notice = if notice and os.time() - notice.at < NOTICE_KEEP_S then notice else nil,
 	}
 	local current = cx.sessions:current()
 	for _, project in projects() do
@@ -445,6 +497,7 @@ local function model(cx)
 			item.active = session ~= nil and session.id == current.id
 			if item.active then result.activePath = worktree.path end
 			item.iced = not worktree.is_main and icebox[project.id] ~= nil and icebox[project.id][worktree.path] == true
+			item.iceboxEnabled = iceboxOn
 			item.coordination = coordinating
 			item.lead = if coordinating then leadOf(entry, worktree, agents) else nil
 			item.agentCount = #(agents[worktree.path] or {})
@@ -822,6 +875,7 @@ local function refreshByHand(cx)
 	-- An explicit refresh also re-checks pull requests immediately.
 	for _, entry in cache do entry.prAt = nil end
 	if linearDefault == false then linearDefault = nil end
+	update.check(redraw, true)
 	refresh(cx, function(doneCx)
 		local function stop(stopCx)
 			spinning = false
@@ -930,6 +984,43 @@ local function shownTab(cx)
 	return focused and cx.session:tab_of(focused)
 end
 
+-- The Settings block (settings.luau) opens in a tab of its own, which the
+-- panel leaves alone: Settings gets the whole tab.
+local SETTINGS_BLOCK = "overseer.settings"
+local function settingsPane(cx)
+	for _, pane in cx.session:panes() do
+		if pane.block == SETTINGS_BLOCK then return pane end
+	end
+	return nil
+end
+
+local function settingsTab(cx, tab)
+	local pane = settingsPane(cx)
+	return pane ~= nil and pane.tab == tab
+end
+
+-- A toast with a button (Tern 0.9.14). Only a toast node drawn in a view can
+-- carry one, so it goes through the Projects panel; with the panel hidden or
+-- a form in its place, it is a plain toast and `hint` takes the button's
+-- place in `sub`. `button` is { label, action, hint? }; its click arrives as
+-- an ordinary canvas action.
+local noticeCount = 0
+local function notify(cx, level, text, sub, button)
+	local pane, kind = slot(cx)
+	local shown = pane ~= nil and kind == "canvas" and cx.session:tab_of(pane) == shownTab(cx)
+	if not button or not shown then
+		local hint = button and button.hint
+		cx:toast(level, text, if hint then (if sub then sub .. ". " .. hint else hint) else sub)
+		return
+	end
+	noticeCount += 1
+	notice = {
+		n = noticeCount, at = os.time(), text = text, sub = sub, tone = level,
+		action = button.action, label = button.label,
+	}
+	redraw(cx)
+end
+
 -- Forgets finished-agent marks you have now seen (their tab is shown) or that
 -- can't be seen any more (their pane closed).
 local function markSeen(cx)
@@ -976,6 +1067,7 @@ local function follow(cx, tab)
 	if not localHost(cx) then return end
 	tab = tab or shownTab(cx)
 	if not tab then return end
+	if settingsTab(cx, tab) then return end
 	local pane = slot(cx)
 	if not pane then
 		if not wantPanel then return end
@@ -1277,12 +1369,12 @@ end
 -- overseer session waiting, failing or finishing to its parent.
 local function onAgentChange(cx, pane, kind)
 	local agents = worktreeAgents(cx)
-	local project, entry, worktree, agent = nil, nil, nil, nil
+	local project, entry, worktree = nil, nil, nil
 	for path, list in agents do
 		for _, candidate in list do
 			if candidate.pane == pane then
 				project, worktree = findWorktree(path)
-				entry, agent = project and cache[project.id], candidate
+				entry = project and cache[project.id]
 			end
 		end
 	end
@@ -1297,7 +1389,11 @@ local function onAgentChange(cx, pane, kind)
 	end
 	local owner = leadOf(entry, worktree, agents) == pane and ownerTree(entry, worktree)
 	local text = nil
-	local said = oneLine(agent.last_message, 300)
+	-- Only the full agent list has its last reply; this runs once per state change.
+	local said = ""
+	for _, listed in cx.agents:list() do
+		if listed.pane == pane then said = oneLine(listed.last_message, 300) end
+	end
 	local quoted = if said ~= "" then " Its last message: \"" .. said .. "\"" else ""
 	if owner and kind == "waiting" and not told.waiting then
 		told.waiting = true
@@ -1664,15 +1760,36 @@ local function requestProjectRemoval(cx, id)
 	redraw(cx)
 end
 
+-- Projects removed this run, for the Undo on their toast: id -> { project, index }.
+local removedProjects = {}
+
 local function removeProject(cx, request)
 	confirmation = nil
 	local kept = {}
-	for _, project in projects() do
-		if project.id ~= request.project then table.insert(kept, project) end
+	for index, project in projects() do
+		if project.id == request.project then
+			removedProjects[project.id] = { project = project, index = index }
+		else
+			table.insert(kept, project)
+		end
 	end
 	tern.kv.set("projects", kept)
 	cache[request.project], collapsed[request.project] = nil, nil
-	cx:toast("info", "Project removed", notificationLabel(request.label))
+	notify(cx, "info", "Project removed", notificationLabel(request.label),
+		{ label = "Undo", action = "restore-project=" .. request.project })
+	redraw(cx)
+end
+
+-- Undo on the Project removed toast: puts the project back where it was.
+local function restoreProject(cx, id)
+	local removed = removedProjects[id]
+	removedProjects[id] = nil
+	if not removed or projectById(id) then return end
+	local all = projects()
+	table.insert(all, math.min(removed.index, #all + 1), removed.project)
+	tern.kv.set("projects", all)
+	cx:toast("info", "Project restored", notificationLabel(removed.project.name))
+	refresh(cx)
 	redraw(cx)
 end
 
@@ -2264,11 +2381,8 @@ end
 local function changeLinear(cx, pane, request, response)
 	local project = projectById(request.project)
 	if not project then rejectForm(cx, pane, "Project is no longer registered."); return end
-	local raw = type(response.linear) == "string" and response.linear:match("^%s*(.-)%s*$") or ""
-	local workspace = string.lower(raw:match("linear%.app/([^/?#]+)") or raw)
-	if workspace ~= "" and not workspace:match("^[%w][%w%-]*$") then
-		rejectForm(cx, pane, "Enter a workspace name such as acme, or a linear.app link."); return
-	end
+	local workspace, invalid = Prefs.linearWorkspace(response.linear)
+	if not workspace then rejectForm(cx, pane, invalid); return end
 	local all = projects()
 	for _, existing in all do
 		if existing.id == project.id then existing.linear = if workspace == "" then nil else workspace end
@@ -2482,19 +2596,27 @@ local function jobFinished(cx, job, status)
 					.. (if kept and #kept > 0 then " · kept " .. notificationLabel(table.concat(kept, ", ")) .. " (uncommitted changes)" else ""))
 			else
 				tern.log.warn("Worktree deleted, but its session was left open: " .. tostring(closeError))
-				cx:toast("error", "Worktree deleted", "Session still open. Check Tern’s log.")
+				notify(cx, "error", "Worktree deleted", "Session still open",
+					{ label = "Close session", action = "close-session=" .. job.path, hint = "Check Tern’s log." })
 			end
 		else
-			cx:toast("error", "Worktree deletion failed", if job.session then "Check the Delete tab. Session kept." else "Check the Delete tab.")
+			-- The setup tab stays open with the error on screen, unless the helper died with it.
+			local tab = if cx.session:pane(job.pane) then { label = "Show", action = "tab=" .. tostring(job.pane), hint = "Check the Delete tab." } else nil
+			notify(cx, "error", "Worktree deletion failed", "Session kept", tab)
 		end
 	else
 		-- Applied on failure too: a partially created worktree keeps its label.
 		applyCreatedName(job)
 		if status == 0 then
-			cx:toast("info", "Worktree created", notificationLabel(job.displayName or job.branch))
+			-- A ticket worktree opens on its own, with its agent (startTicketAgent).
+			local open = if job.agentPrompt then nil else {
+				label = "Open", action = "open-branch=" .. job.branch .. ":" .. job.project,
+			}
+			notify(cx, "info", "Worktree created", notificationLabel(job.displayName or job.branch), open)
 			startTicketAgent(job)
 		else
-			cx:toast("error", "Worktree creation failed", "Check the Create tab for details.")
+			local tab = if cx.session:pane(job.pane) then { label = "Show", action = "tab=" .. tostring(job.pane), hint = "Check the Create tab for details." } else nil
+			notify(cx, "error", "Worktree creation failed", nil, tab)
 		end
 	end
 end
@@ -2565,9 +2687,10 @@ local function trackCreations(cx)
 				if needsYou and not state.told then
 					state.told = true
 					local project = projectById(job.project)
-					local why = if asking then "It's asking a question in its setup tab."
-						else "No output for " .. quiet .. " s. It may be waiting for an answer."
-					cx:toast("error", "Creating " .. (job.displayName or job.branch) .. " may need you", why .. " Click its row.")
+					local why = if asking then "It's asking a question in its setup tab"
+						else "No output for " .. quiet .. " s. It may be waiting for an answer"
+					notify(cx, "error", "Creating " .. (job.displayName or job.branch) .. " may need you", why,
+						{ label = "Answer", action = "tab=" .. tostring(job.pane), hint = "Click its row." })
 					oplog.write("warn", { op = "create", event = "needs-you", project = project and project.name,
 						branch = job.branch, detail = why })
 				end
@@ -2580,22 +2703,24 @@ local function trackCreations(cx)
 	if changed then redraw(cx) end
 end
 
--- Opens a saved log in a new tab with less, at its end. The command goes through
--- your shell, and single quotes keep the path one word in bash, zsh, fish and nu.
--- Git for Windows keeps less off PATH, so Windows shows it in Tern's file view.
-local function openLog(cx, file, name)
-	if not tern.fs.exists(file) then report(cx, "That log is no longer saved."); return end
-	local pane
-	if wt.WINDOWS then
-		local read, text = pcall(tern.fs.read, file, 1024 * 1024)
-		local _, lines = string.gsub(if read and type(text) == "string" then text else "", "\n", "")
-		pane = cx.docs:open(file, { how = "tab", line = math.max(lines, 1) })
-	else
-		if string.find(file, "'", 1, true) then report(cx, "Can't open " .. file .. " through a shell."); return end
-		pane = cx.layout:new_tab({ command = "less -R +G '" .. file .. "'" })
-	end
-	local tab = pane and cx.session:tab_of(pane)
-	if tab then cx.layout:name_tab(tab, name) end
+-- The newest operation log entries, as a table over the shown tab (a glimpse:
+-- a click outside or Esc puts it away). The full file stays in ops.log.
+local LOG_SHOWN = 200
+local function showLog(cx)
+	local entries = oplog.recent(LOG_SHOWN)
+	local pane, err = cx.canvas:open({
+		title = "Overseer operation log", view = view.operationLog(entries), how = "glimpse",
+		about = "What Overseer did: worktree creations and deletions, briefs, relays and coordination, newest first. Read-only.",
+	})
+	if not pane then report(cx, err or "Couldn't open the operation log.", "Operation log") end
+end
+
+-- Overseer Settings: focuses the Settings tab, or opens one.
+local function openSettings(cx)
+	if not requireLocal(cx) then return end
+	local found = settingsPane(cx)
+	if found then cx.layout:focus(found.pane); return end
+	if not cx:new_block(SETTINGS_BLOCK, {}, "tab") then report(cx, "Couldn't open Overseer Settings.", "Settings") end
 end
 
 -- Commands, like clicks, only queue their work.
@@ -2620,9 +2745,46 @@ command("create", "Create worktree", "branch", nil, function(cx)
 	local project = activeWorktree(cx)
 	if project then openForm(cx, "create", project) else navigator(cx); cx:toast("info", "Choose a project", "Click + beside a project's name.") end
 end)
-command("ops-log", "Show Overseer's operation log", "list", nil, function(cx)
-	openLog(cx, oplog.path(), "Overseer log")
-end)
+command("ops-log", "Show Overseer's operation log", "list", nil, showLog)
+command("settings", "Overseer Settings", "gear", nil, openSettings)
+
+-- Runs `launch` (a shell command and optional cwd) in a new tab of this window
+-- named `title`, so you can watch it and answer its questions there.
+local function terminalTab(cx, title, launch)
+	local terminal = cx.layout:new_tab(launch)
+	if not terminal then report(cx, "Couldn't open a terminal for: " .. launch.command, title); return false end
+	local tab = cx.session:tab_of(terminal)
+	if tab then cx.layout:name_tab(tab, title) end
+	return true
+end
+
+-- Install or Connect on Settings' Integrations (settings.luau writes kv
+-- `setup-request`): runs one of Prefs.SETUP in a new tab of the window it came
+-- from, so you can answer the CLI's questions there.
+local function runSetup(cx)
+	local request = tern.kv.get("setup-request")
+	if type(request) ~= "table" then return end
+	if request.window and request.window ~= cx:window_key() then return end
+	tern.kv.set("setup-request", nil)
+	local setup = Prefs.SETUP[request.run]
+	if not setup then return end
+	if terminalTab(cx, setup.title, { command = setup.command }) then
+		oplog.write("info", { op = "setup", event = "started", detail = setup.command })
+	end
+end
+
+-- Update in the header: updates this copy in a terminal tab (see update.luau).
+-- Tern reloads the plugin once its files change, and the button goes with it.
+local function runUpdate(cx)
+	local latest = update.available()
+	local commandLine, cwd = update.command()
+	if not latest or not commandLine then return end
+	if terminalTab(cx, "Update Overseer", { command = commandLine, cwd = cwd }) then
+		update.started()
+		oplog.write("info", { op = "update", event = "started",
+			detail = string.format("%s → %s: %s", tostring(update.installed), latest, commandLine) })
+	end
+end
 
 local TICKET_PROMPT = "Please read ticket %s to understand your task and ask any questions you have before we start"
 
@@ -2700,9 +2862,28 @@ local function openLink(cx, url)
 	end
 end
 
+-- Open on the Worktree created toast: the job knew only the branch
+-- (`<branch>:<project id>`; a branch name can't hold a colon), so find its path.
+local function openBranch(cx, value)
+	local branch, id = string.match(value or "", "^([^:]+):(.+)$")
+	local project = id and projectById(id)
+	if not project then report(cx, "Project not found. Refresh Projects."); return end
+	for _, tree in (cache[project.id] and cache[project.id].worktrees or {}) do
+		if tree.branch == branch and not tree.is_main then openWorktree(cx, tree.path); return end
+	end
+	wt.list(project, function(trees, err, nextCx)
+		if not nextCx then return end
+		if not trees then report(nextCx, err, "Worktree not opened"); return end
+		for _, tree in trees do
+			if tree.branch == branch and not tree.is_main then openWorktree(nextCx, tree.path); return end
+		end
+		report(nextCx, "No worktree for " .. branch .. ".", "Worktree not opened")
+	end)
+end
+
 local function canvasAction(ev, cx)
-	if ev.act == "help" then
-		cx.docs:open(tern.plugin.dir .. "/README.md", { how = "tab" })
+	if ev.act == "settings" then
+		openSettings(cx)
 		return
 	elseif ev.act == "link" then
 		openLink(cx, ev.value)
@@ -2710,6 +2891,7 @@ local function canvasAction(ev, cx)
 	end
 	if not requireLocal(cx) then return end
 	if ev.act == "add" then pickProject(cx)
+	elseif ev.act == "update" then runUpdate(cx)
 	elseif ev.act == "refresh" then
 		refreshByHand(cx)
 	elseif ev.act == "collapse" then collapsed[ev.value] = not collapsed[ev.value]; redraw(cx)
@@ -2755,7 +2937,10 @@ local function canvasAction(ev, cx)
 		if project then openForm(cx, "rename", project, worktree)
 		else report(cx, "Worktree not found. Refresh Projects.") end
 	elseif ev.act == "close-session" then
-		requestWorktreeAction(cx, "close", view.worktreePath(ev.node))
+		-- From a row's menu, or the Close session button on a toast (`value` is the path).
+		requestWorktreeAction(cx, "close", view.worktreePath(ev.node) or ev.value)
+	elseif ev.act == "open-branch" then openBranch(cx, ev.value)
+	elseif ev.act == "restore-project" then restoreProject(cx, ev.value)
 	elseif ev.act == "delete-worktree" then
 		requestWorktreeAction(cx, "delete", view.worktreePath(ev.node))
 	elseif ev.act == "confirm" then confirmWorktreeAction(cx, ev.value)
@@ -2774,10 +2959,10 @@ end
 
 local CANVAS_ACTIONS = {}
 for _, act in {
-	"help", "add", "refresh", "collapse", "create", "open-worktree", "link", "icebox-add", "icebox-remove",
+	"settings", "add", "refresh", "collapse", "create", "open-worktree", "link", "icebox-add", "icebox-remove",
 	"toggle-icebox", "change-base", "set-linear", "remove-project", "visualize", "rename",
 	"close-session", "delete-worktree", "confirm", "confirm-all", "cancel", "tab", "fold", "move-under", "make-top-level",
-	"make-lead", "brief-children", "coordination-on", "coordination-off",
+	"make-lead", "brief-children", "coordination-on", "coordination-off", "open-branch", "restore-project", "update",
 } do CANVAS_ACTIONS[act] = true end
 
 -- Clicks only queue their work: an overrun here would pause the hook and
@@ -2845,6 +3030,7 @@ local lastTick = tern.now()
 -- When Tern paused the timer hook, until when (tern.now() ms); 0 when running.
 local timerPausedUntil = 0
 local tick
+local settingsRev = tern.kv.get("settings-rev")
 
 local function scheduleTick(generation)
 	budget.later("tick", TICK_MS, function(cx) tick(generation, cx) end)
@@ -2856,6 +3042,25 @@ tick = function(generation, cx)
 	scheduleTick(generation)
 	lastTick = tern.now()
 	if not cx or not localHost(cx) then return end
+	-- Settings changed (settings.luau bumps the rev): read Git config and the
+	-- listings again, and draw.
+	local rev = tern.kv.get("settings-rev")
+	if rev ~= settingsRev then
+		settingsRev = rev
+		separately("settings changed", function(nextCx)
+			refresh(nextCx)
+			redraw(nextCx)
+		end)
+	end
+	if tern.kv.get("setup-request") ~= nil then separately("setup", runSetup) end
+	update.check(redraw)
+	local updated = update.finished()
+	if updated then
+		separately("updated", function(nextCx)
+			oplog.write("info", { op = "update", event = "finished", detail = updated })
+			notify(nextCx, "info", "Overseer updated", "Now on " .. updated)
+		end)
+	end
 	separately("form check", forms)
 	-- Resumes fast form checks after a plugin reload left a form open.
 	watchForms()
@@ -2928,6 +3133,7 @@ end
 -- change a worktree's overseer session.
 tern.on("agent_state", function(ev, _cx)
 	ensureTicking("agent_state")
+	agentStates[ev.pane] = ev.new
 	if ev.new == "working" or ev.new == "waiting_input" then
 		separately("agent state", function() setFinished(ev.pane, nil) end)
 		separately("rails agent", function(cx)

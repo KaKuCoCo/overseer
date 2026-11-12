@@ -2,6 +2,20 @@
 
 上游：[mmnavarr/overseer](https://github.com/mmnavarr/overseer)
 
+## 2026-11-12
+
+### Changed
+- 合併上游 2.5.1，版本號改為 `2.5.1-windows.1`。
+  - 原因：與上游正式版本區分。
+- Update 按鈕與版本檢查改指向 fork 的 `windows` 分支，`2.5.1-windows.N` 視為 `2.5.1.N` 比較，Windows 上更新指令用純 `tern`。
+  - 原因：上游只看自己 `main` 的 `plugin.toml`，且版本號含 `-windows` 後無法比較。
+- Settings 在 Windows 的整合：`gh` 以 `winget` 安裝，Linear CLI 只給網站連結；診斷改用 `tern_executable()` 與 `git-wt`。
+  - 原因：上游寫死 Homebrew、macOS 的 Tern 路徑與 `wt`。
+
+### Removed
+- 刪除 `openLog`（以 `less` 或檔案檢視開啟操作紀錄）。
+  - 原因：上游 2.4.3 改成在 glimpse 表格顯示，不再需要 Windows 特例。
+
 ## 2026-11-11
 
 ### Changed
